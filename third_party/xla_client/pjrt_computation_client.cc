@@ -80,7 +80,6 @@ PjRtComputationClient::PjRtComputationClient() {
     TF_VLOG(1) << "Initializing TFRT TPU client...";
     XLA_CHECK_OK(pjrt::LoadPjrtPlugin(
         "tpu", sys_util::GetEnvString(env::kEnvTpuLibraryPath, "libtpu.so")));
-    supports_logical_on_device_shape_ = false;
     client_ = std::move(xla::GetCApiClient("TPU").value());
   } else if (device_type == "TPU_LEGACY") {
     TF_VLOG(1) << "Initializing PjRt StreamExecutor TPU client...";
@@ -320,12 +319,7 @@ std::vector<xla::Literal> PjRtComputationClient::TransferFromServer(
     auto new_handle = ReplicateShardedData(handle);
     const PjRtData& pjrt_data = dynamic_cast<const PjRtData&>(*new_handle);
 
-    // TODO(wcromar): Only use logical_on_device_shape when PJRT C API supports
-    // it.
-    xla::Shape target_shape = ShapeUtil::DeviceShapeToHostShape(
-        supports_logical_on_device_shape_
-            ? pjrt_data.buffer->logical_on_device_shape().value()
-            : pjrt_data.buffer->on_device_shape());
+    xla::Shape target_shape = ShapeUtil::DeviceShapeToHostShape(pjrt_data.buffer->logical_on_device_shape().value());
     auto& literal = literals.emplace_back(target_shape);
 
     // PJRT will always try to copy the full bounded size into our literal. If
@@ -459,7 +453,7 @@ PjRtComputationClient::ExecuteComputation(
   execute_options.strict_shape_checking = false;
 
   // Required as of cl/518733871
-  execute_options.use_major_to_minor_data_layout_for_callbacks = true;  
+  execute_options.use_major_to_minor_data_layout_for_callbacks = true;
 
   std::optional<PjRtFuture<Status>> returned_future;
   std::vector<std::unique_ptr<xla::PjRtBuffer>> results =
@@ -530,7 +524,7 @@ PjRtComputationClient::ExecuteReplicated(
   execute_options.multi_slice_config = nullptr;
 
   // Required as of cl/518733871
-  execute_options.use_major_to_minor_data_layout_for_callbacks = true;  
+  execute_options.use_major_to_minor_data_layout_for_callbacks = true;
 
   std::vector<std::vector<std::unique_ptr<PjRtBuffer>>> results =
       pjrt_computation.executable->Execute(argument_handles, execute_options)
